@@ -59,10 +59,33 @@ selected_period = st.sidebar.selectbox(
 
 sector_data = fetch_sector_data(sectors, selected_period)
 scores_df = calculate_scores(sector_data)
-st.subheader("Sector Overview")
-for sector in selected_sectors:
-    df = sector_data[sector]
-    st.write(f"**{sector}**")
-    st.write(df.tail())
-    st.subheader("Sector Scores")
-    st.dataframe(scores_df.sort_values("Momentum (%)", ascending=False))
+st.subheader("Sector Momentum (%)")
+fig = px.bar(
+    scores_df,
+    x="Sector",
+    y="Momentum (%)",
+    color="Momentum (%)",
+    color_continuous_scale="RdYlGn",
+    title="20-Day Momentum by Sector"
+)
+st.plotly_chart(fig, use_container_width=True)
+st.subheader("Sector Volatility (%)")
+fig2 = px.bar(
+    scores_df,
+    x="Sector",
+    y="Volatility (%)",
+    color="Volatility (%)",
+    color_continuous_scale="RdYlGn_r",
+    title="Daily Return Volatility by Sector"
+)
+st.plotly_chart(fig2, use_container_width=True)
+st.subheader("Vol-Adjusted Return by Sector")
+fig3 = px.bar(
+    scores_df,
+    x="Sector",
+    y="Vol-Adjusted Return",
+    color="Vol-Adjusted Return",
+    color_continuous_scale="RdYlGn",
+    title="Momentum Adjusted for Volatility"
+)
+st.plotly_chart(fig3, use_container_width=True)
