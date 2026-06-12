@@ -168,3 +168,25 @@ for _, row in scores_df.sort_values("Composite Score", ascending=False).iterrows
         st.warning(f"**{row['Sector']}**: {row['Signal']} (Score: {row['Composite Score']})")
     else:
         st.error(f"**{row['Sector']}**: {row['Signal']} (Score: {row['Composite Score']})")
+
+with st.expander("Methodology and Limitations"):
+    st.write("""
+    **Composite Score Calculation**
+    
+    Each sector receives a composite score (0-100) based on three factors:
+    - Momentum (40%): 20-day percentage price change
+    - Volatility-Adjusted Return (40%): Momentum divided by volatility, rewarding consistent gains over erratic ones
+    - Volatility (20%): Daily return standard deviation, with lower volatility scoring higher
+    
+    All factors are normalized to a 0-100 scale before weighting, so no single factor dominates due to differences in units or magnitude.
+    
+    **Signal Labels**
+    
+    Strong (60+), Neutral (40-59), and Weak (below 40) reflect each sector's composite score relative to the other sectors currently selected. These are not predictions or investment recommendations.
+    
+    **Limitations**
+    
+    - The 20-day window captures short-term momentum, which may reflect temporary conditions rather than durable trends
+    - Sector ETFs move with the broader market, so rankings partly reflect overall market direction in addition to sector-specific performance
+    - This model has not been backtested for predictive accuracy
+    """)  
