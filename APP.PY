@@ -19,7 +19,18 @@ sectors = {
     "Materials": "XLB",
     "Communication Services": "XLC"
 }
-
+sector_stocks = {
+    "Technology": ["AAPL", "MSFT", "NVDA", "AVGO", "ORCL"],
+    "Healthcare": ["UNH", "JNJ", "LLY", "ABBV", "MRK"],
+    "Financials": ["JPM", "BAC", "GS", "WFC", "MS"],
+    "Energy": ["XOM", "CVX", "COP", "SLB", "EOG"],
+    "Consumer Discretionary": ["AMZN", "TSLA", "HD", "MCD", "NKE"],
+    "Industrials": ["CAT", "BA", "UPS", "HON", "GE"],
+    "Utilities": ["NEE", "DUK", "SO", "D", "AEP"],
+    "Real Estate": ["PLD", "AMT", "EQIX", "SPG", "O"],
+    "Materials": ["LIN", "SHW", "FCX", "APD", "NEM"],
+    "Communication Services": ["GOOGL", "META", "NFLX", "DIS", "TMUS"]
+}
 period = "6mo"
 
 @st.cache_data
@@ -28,6 +39,13 @@ def fetch_sector_data(sectors, period):
     for sector, ticker in sectors.items():
         df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
         data[sector] = df
+    return data
+@st.cache_data
+def fetch_stock_data(tickers, period):
+    data = {}
+    for ticker in tickers:
+        df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
+        data[ticker] = df
     return data
 def calculate_scores(sector_data):
     scores = []
@@ -70,15 +88,38 @@ selected_sectors = st.sidebar.multiselect(
     options=list(sectors.keys()),
     default=list(sectors.keys())
 )
+st.sidebar.header("Stock Drill-Down")
+drilldown_sector = st.sidebar.selectbox(
+    "Select a sector to view individual stocks",
+    options=["None"] + selected_sectors
+)
+
 
 selected_period = st.sidebar.selectbox(
     "Select Time Period",
     options=["1mo", "3mo", "6mo", "1y", "2y"],
     index=2
 )
+if drilldown_sector != "None":
+    st.subheader(f"{drilldown_sector}: Top Stocks")
+    stock_data = fetch_stock_data(sector_stocks[drilldown_sector], selected_period)
 
+    for ticker, df in stock_data.items():
+        close = df["Close"].squeeze().dropna()
+        fig_stock = px.line(
+            close,
+            title=f"{ticker} - Closing Price"
+        )
+        st.plotly_chart(fig_stock, use_container_width=True)
+    close = df["Close"].squeeze().dropna()
+    fig_stock = px.line(
+        close,
+        title=f"{ticker} - Closing Price"
+    )
+    st.plotly_chart(fig_stock, use_container_width=True, key=f"stock_chart_{ticker}")
 sector_data = fetch_sector_data(sectors, selected_period)
 scores_df = calculate_scores(sector_data)
+scores_df = scores_df[scores_df["Sector"].isin(selected_sectors)]
 st.subheader("Sector Momentum (%)")
 fig = px.bar(
     scores_df,
