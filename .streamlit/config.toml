@@ -1,7 +1,7 @@
 [theme]
-base = "light"
-primaryColor = "#4C72B0"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F6F9"
-textColor = "#1F2937"
+base = "dark"
+primaryColor = "#4C72B0"  # Swapped back to a clean corporate blue for text focus
+backgroundColor = "#0D1117"
+secondaryBackgroundColor = "#161B22"
+textColor = "#E6EDF2"
 font = "sans serif"
