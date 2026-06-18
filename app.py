@@ -341,8 +341,4 @@ with tab_drilldown:
             with target_col.container(border=True):
                 st.plotly_chart(fig_stock, use_container_width=True, key=f"modern_chart_{ticker}")
     else:
-<<<<<<< HEAD:app.py
         st.info("Select a sector from the sidebar under Stock Drill-Down to view individual stock charts.")
-=======
-        st.info("Select an active sector from the sidebar under Stock Drill-Down to initialize individual asset streams.")
->>>>>>> 557ac52 (Updated designs to change loading, visual display color, and structural changes. Additionally updated scoring system):APP.PY
