@@ -233,7 +233,7 @@ with tab_drilldown:
                 g_cols[1].markdown('<div class="skeleton-card"></div>', unsafe_allow_html=True)
 
             for idx, ticker in enumerate(tickers_to_load):
-                progress_text.markdown(f"🧬 **Predictive Engine:** Quantifying metrics for **{ticker}**...")
+                progress_text.markdown(f"**Predictive Engine:** Quantifying metrics for **{ticker}**...")
                 percent_complete = int(((idx + 1) / len(tickers_to_load)) * 100)
                 progress_bar.progress(percent_complete)
                 single_df = yf.download(ticker, period=selected_period, auto_adjust=True, progress=False)
