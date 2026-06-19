@@ -15,7 +15,7 @@ st.title("Stock Sector Performance Dashboard")
 st.write(
     "**How it works:** This dashboard ranks stock market sectors using a combination of trend strength and risk metrics. "
     "Under the **Stock Performance** tab, the analysis engine combines two separate components to look at individual stocks: one maps out where the price "
-    "is likely heading over the next 14 days, while the other flags whether the stock is an active 'Buy' or a safer 'Hold' at the moment."
+    "is likely heading over the next 14 days, while the other flags whether the stock is an active 'Buy' or a safer 'Hold' at the moment. All outputs and forecasts are merely for educational purposes and should not be taken as financial advice. Always do your own research before making any investment decisions."
 )
 
 # Define sector ETFs & Stocks
