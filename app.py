@@ -5,7 +5,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from prophet import Prophet
-from sklearn.ensemble import RandomForestClassifier
 
 st.set_page_config(page_title="Sector Performance Dashboard", layout="wide")
 
@@ -15,11 +14,11 @@ st.set_page_config(page_title="Sector Performance Dashboard", layout="wide")
 st.title("Stock Sector Performance Dashboard")
 st.write(
     "**How it works:** This dashboard ranks stock market sectors using a combination of trend strength and risk metrics. "
-    "Under the **Stock Performance** tab, the predictive engine combines two separate models to look at individual stocks: one maps out where the price "
+    "Under the **Stock Performance** tab, the analysis engine combines two separate components to look at individual stocks: one maps out where the price "
     "is likely heading over the next 14 days, while the other flags whether the stock is an active 'Buy' or a safer 'Hold' at the moment."
 )
 
-# Define sector ETFs & Stocks 
+# Define sector ETFs & Stocks
 sectors = {
     "Technology": "XLK", "Healthcare": "XLV", "Financials": "XLF", "Energy": "XLE",
     "Consumer Discretionary": "XLY", "Industrials": "XLI", "Utilities": "XLU",
@@ -76,13 +75,13 @@ def calculate_scores(sector_data):
         sma_span = min(200, len(close))
         sma_200 = close.rolling(window=sma_span).mean().iloc[-1]
         trend_strength = float(((close.iloc[-1] - sma_200) / sma_200) * 100)
-        
+
         sma_20 = close.rolling(window=20).mean()
         momentum_20d = float(((sma_20.iloc[-1] - sma_20.iloc[-20]) / sma_20.iloc[-20]) * 100)
-        
+
         volatility = float(close.pct_change().std() * 100)
         vol_adjusted_return = momentum_20d / volatility if volatility != 0 else 0
-        
+
         scores.append({
             "Sector": sector, "Trend Strength (%)": round(trend_strength, 2),
             "Volatility (%)": round(volatility, 2), "Vol-Adjusted Return": round(vol_adjusted_return, 2)
@@ -108,27 +107,29 @@ def calculate_hybrid_forecast(df_stock, sector_features, horizon=14):
     df_prep = df_stock["Close"].reset_index()
     df_prep.columns = ["ds", "y"]
     df_prep["ds"] = df_prep["ds"].dt.tz_localize(None)
-    
+
     m = Prophet(daily_seasonality=False, weekly_seasonality=False, yearly_seasonality=False)
     m.fit(df_prep)
-    
+
     future = m.make_future_dataframe(periods=horizon)
     forecast = m.predict(future)
-    
-    # Synthetic Multivariate Classifier Rules
-    X_train = np.array([[80, 20, 80], [50, 50, 50], [20, 80, 20], [90, 10, 95]])
-    y_train = np.array([1, 0, 0, 1]) 
-    
-    clf = RandomForestClassifier(n_estimators=10, random_state=42)
-    clf.fit(X_train, y_train)
-    
-    current_features = np.array([[
-        sector_features["Trend Score"], sector_features["Volatility Score"], sector_features["Vol-Adj Score"]
-    ]])
-    
-    prediction = clf.predict(current_features)[0]
-    model_signal = "Model Signal: OUTPERFORM (Buy)" if prediction == 1 else "Model Signal: NEUTRAL (Hold)"
-    
+
+    # Rule-based signal derived from composite sector features
+    trend_score = sector_features["Trend Score"]
+    vol_score = sector_features["Volatility Score"]
+    vol_adj_score = sector_features["Vol-Adj Score"]
+
+    buy_conditions = sum([
+        trend_score >= 60,
+        vol_score >= 50,
+        vol_adj_score >= 60
+    ])
+
+    if buy_conditions >= 2:
+        model_signal = "Model Signal: OUTPERFORM (Buy)"
+    else:
+        model_signal = "Model Signal: NEUTRAL (Hold)"
+
     return forecast, model_signal
 
 
@@ -202,7 +203,7 @@ with tab_drilldown:
         st.subheader(f"{drilldown_sector}: Top Stocks Predictive Matrix")
         sector_meta = scores_df[scores_df["Sector"] == drilldown_sector].iloc[0]
         tickers_to_load = sector_stocks[drilldown_sector]
-        
+
         stock_data = {}
         with st.container():
             progress_text = st.empty()
@@ -212,14 +213,14 @@ with tab_drilldown:
                 g_cols = st.columns(2)
                 g_cols[0].markdown('<div class="skeleton-card"></div>', unsafe_allow_html=True)
                 g_cols[1].markdown('<div class="skeleton-card"></div>', unsafe_allow_html=True)
-            
+
             for idx, ticker in enumerate(tickers_to_load):
                 progress_text.markdown(f"**Predictive Engine:** Quantifying metrics for **{ticker}**...")
                 percent_complete = int(((idx + 1) / len(tickers_to_load)) * 100)
                 progress_bar.progress(percent_complete)
                 single_df = yf.download(ticker, period=selected_period, auto_adjust=True, progress=False)
                 stock_data[ticker] = single_df
-            
+
             progress_text.empty()
             progress_bar.empty()
             skeleton_grid.empty()
@@ -227,31 +228,30 @@ with tab_drilldown:
         cols = st.columns(2)
         for idx, (ticker, df) in enumerate(stock_data.items()):
             forecast, model_badge = calculate_hybrid_forecast(df, sector_meta, horizon=14)
-            
+
             hist_df = df["Close"].reset_index()
             hist_df.columns = ["Date", "Price"]
             hist_df["Date"] = hist_df["Date"].dt.tz_localize(None)
-            
+
             last_hist_date = hist_df["Date"].max()
             last_hist_price = hist_df["Price"].iloc[-1]
-            
+
             future_df = forecast[forecast["ds"] > last_hist_date].copy()
             prophet_boundary_price = forecast[forecast["ds"] <= last_hist_date]["yhat"].iloc[-1]
             vertical_bias = last_hist_price - prophet_boundary_price
-            
+
             future_df["yhat"] += vertical_bias
             future_df["yhat_upper"] += vertical_bias
             future_df["yhat_lower"] += vertical_bias
-            
+
             connect_row = pd.DataFrame({
-                'ds': [last_hist_date], 'yhat': [last_hist_price], 
+                'ds': [last_hist_date], 'yhat': [last_hist_price],
                 'yhat_upper': [last_hist_price], 'yhat_lower': [last_hist_price]
             })
             future_df = pd.concat([connect_row, future_df]).sort_values("ds")
 
             is_bullish_line = future_df["yhat"].iloc[-1] > last_hist_price
 
-            # --- RENAME INSIGHT TEXTS FROM AI TO MODEL ---
             if "OUTPERFORM" in model_badge:
                 badge_color = "#2E8B57"
                 if not is_bullish_line:
@@ -264,7 +264,7 @@ with tab_drilldown:
                 badge_color = "#8B949E"
                 if is_bullish_line:
                     line_color, fill_color = "#E8A33D", "rgba(232,163,61,0.1)"
-                    insight_text = f"⚠️ <b>Risk Warning:</b> The chart shows a slight upward trend based on past seasonal behavior, but the classification model still warns you to <b>HOLD</b>. Sharp, sudden jumps in market volatility mean this mini-rally is unpredictable and carries a high risk of reversing."
+                    insight_text = f"⚠️ <b>Risk Warning:</b> The chart shows a slight upward trend based on past seasonal behavior, but the signal engine still warns you to <b>HOLD</b>. Sharp, sudden jumps in market volatility mean this mini-rally is unpredictable and carries a high risk of reversing."
                 else:
                     line_color, fill_color = "#E8A33D", "rgba(232,163,61,0.1)"
                     insight_text = f"🛑 <b>Sideways Trend:</b> Price momentum is slowing down and baseline sector risks are expanding. There is no clear advantage to entering a new position right now; sitting on cash is the safer move."
@@ -285,7 +285,7 @@ with tab_drilldown:
                 xaxis=dict(showgrid=True, gridcolor="#21262D", linecolor="#30363D"),
                 yaxis=dict(showgrid=True, gridcolor="#21262D", position=1, side="right")
             )
-            
+
             target_col = cols[idx % 2]
             with target_col.container(border=True):
                 st.plotly_chart(fig, use_container_width=True, key=f"ml_chart_{ticker}")
@@ -306,13 +306,20 @@ with st.expander("Methodology and System Limitations"):
     - **Volatility-Adjusted Return (40%):** A risk-efficiency metric. It divides 20-day moving average momentum by daily volatility, rewarding steady growth trends while penalizing erratic spikes.
     - **Volatility Management (20%):** Standard deviation of daily returns. Lower baseline volatility yields a higher score to reward structural stability.
 
-    Factors are mathematically normalized via Min-Max scaling to a strict 0-100 range prior to weighting, ensuring that varying units of measurement do not artificially skew final performance outputs.
+    Factors are mathematically normalized via Min-Max scaling to a 0-100 range prior to weighting, ensuring that varying units of measurement do not artificially skew final performance outputs.
 
     **Signal Labels**
 
     Strong (60+), Neutral (40-59), and Weak (below 40) represent a cross-sectional market rank compared to all tracked structural sectors simultaneously, rather than a selective peer group filter.
 
-    **Hybrid Predictive Architecture**
-    - **Prophet Time-Series:** Models continuous seasonal variance vectors to extract a localized 14-day expected price trend line.
-    - **Random Forest Classifier:** Evaluates underlying composite risk features to detect divergence and issue a broad Outperform or Neutral capital deployment thesis.
+    **Stock-Level Signal Engine**
+    - **Prophet Time-Series Forecast:** Models price history to generate a localized 14-day expected price trend with uncertainty bounds.
+    - **Rule-Based Signal:** Evaluates the sector's normalized composite features including the trend score, volatility score, and volatility-adjusted return score against defined thresholds. A Buy signal requires at least 2 of 3 conditions to pass, grounding the output in the same scoring logic used across the sector overview.
+
+    **Limitations**
+    - Historical trend features can lag during fast, fundamental macroeconomic shifts.
+    - Volatility estimates assume standard normal return distributions, which may underweight sharp tail-risk events.
+    - The Prophet forecast is trained on price history only and does not incorporate earnings, macro events, or sentiment data.
+    - The composite score and Buy/Hold signal are relative measures and do not constitute investment advice.
+    - The stock drill-down uses a fixed list of 5 representative companies per sector rather than the full ETF composition.
     """)
