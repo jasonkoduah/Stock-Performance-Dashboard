@@ -37,6 +37,19 @@ sector_stocks = {
     "Communication Services": ["GOOGL", "META", "NFLX", "DIS", "TMUS"]
 }
 
+COMPANY_NAMES = {
+    "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "NVIDIA", "AVGO": "Broadcom", "ORCL": "Oracle",
+    "UNH": "UnitedHealth", "JNJ": "Johnson & Johnson", "LLY": "Eli Lilly", "ABBV": "AbbVie", "MRK": "Merck",
+    "JPM": "JPMorgan", "BAC": "Bank of America", "GS": "Goldman Sachs", "WFC": "Wells Fargo", "MS": "Morgan Stanley",
+    "XOM": "ExxonMobil", "CVX": "Chevron", "COP": "ConocoPhillips", "SLB": "Schlumberger", "EOG": "EOG Resources",
+    "AMZN": "Amazon", "TSLA": "Tesla", "HD": "Home Depot", "MCD": "McDonald's", "NKE": "Nike",
+    "CAT": "Caterpillar", "BA": "Boeing", "UPS": "UPS", "HON": "Honeywell", "GE": "GE Aerospace",
+    "NEE": "NextEra Energy", "DUK": "Duke Energy", "SO": "Southern Company", "D": "Dominion Energy", "AEP": "AEP",
+    "PLD": "Prologis", "AMT": "American Tower", "EQIX": "Equinix", "SPG": "Simon Property", "O": "Realty Income",
+    "LIN": "Linde", "SHW": "Sherwin-Williams", "FCX": "Freeport-McMoRan", "APD": "Air Products", "NEM": "Newmont",
+    "GOOGL": "Alphabet", "META": "Meta", "NFLX": "Netflix", "DIS": "Disney", "TMUS": "T-Mobile"
+}
+
 ACCENT_COLOR = "#4C72B0"
 SIGNAL_COLORS = {"Strong": "#2E8B57", "Neutral": "#E8A33D", "Weak": "#D9534F"}
 SIGNAL_ORDER = ["Strong", "Neutral", "Weak"]
@@ -108,13 +121,18 @@ def calculate_hybrid_forecast(df_stock, sector_features, horizon=14):
     df_prep.columns = ["ds", "y"]
     df_prep["ds"] = df_prep["ds"].dt.tz_localize(None)
 
-    m = Prophet(daily_seasonality=False, weekly_seasonality=False, yearly_seasonality=False)
+    m = Prophet(
+        daily_seasonality=False,
+        weekly_seasonality=False,
+        yearly_seasonality=False,
+        interval_width=0.95,
+        uncertainty_samples=500
+    )
     m.fit(df_prep)
 
     future = m.make_future_dataframe(periods=horizon)
     forecast = m.predict(future)
 
-    # Rule-based signal derived from composite sector features
     trend_score = sector_features["Trend Score"]
     vol_score = sector_features["Volatility Score"]
     vol_adj_score = sector_features["Vol-Adj Score"]
@@ -215,7 +233,7 @@ with tab_drilldown:
                 g_cols[1].markdown('<div class="skeleton-card"></div>', unsafe_allow_html=True)
 
             for idx, ticker in enumerate(tickers_to_load):
-                progress_text.markdown(f"**Predictive Engine:** Quantifying metrics for **{ticker}**...")
+                progress_text.markdown(f"🧬 **Predictive Engine:** Quantifying metrics for **{ticker}**...")
                 percent_complete = int(((idx + 1) / len(tickers_to_load)) * 100)
                 progress_bar.progress(percent_complete)
                 single_df = yf.download(ticker, period=selected_period, auto_adjust=True, progress=False)
@@ -234,54 +252,84 @@ with tab_drilldown:
             hist_df["Date"] = hist_df["Date"].dt.tz_localize(None)
 
             last_hist_date = hist_df["Date"].max()
-            last_hist_price = hist_df["Price"].iloc[-1]
+            last_hist_price = float(hist_df["Price"].squeeze().dropna().iloc[-1])
 
             future_df = forecast[forecast["ds"] > last_hist_date].copy()
-            prophet_boundary_price = forecast[forecast["ds"] <= last_hist_date]["yhat"].iloc[-1]
+            prophet_boundary_price = float(forecast[forecast["ds"] <= last_hist_date]["yhat"].iloc[-1])
             vertical_bias = last_hist_price - prophet_boundary_price
 
             future_df["yhat"] += vertical_bias
             future_df["yhat_upper"] += vertical_bias
             future_df["yhat_lower"] += vertical_bias
 
+            upper_vals = future_df[["yhat_upper", "yhat_lower"]].max(axis=1)
+            lower_vals = future_df[["yhat_upper", "yhat_lower"]].min(axis=1)
+            future_df["yhat_upper"] = upper_vals
+            future_df["yhat_lower"] = lower_vals
+
             connect_row = pd.DataFrame({
-                'ds': [last_hist_date], 'yhat': [last_hist_price],
-                'yhat_upper': [last_hist_price], 'yhat_lower': [last_hist_price]
+                'ds': [last_hist_date],
+                'yhat': [float(last_hist_price)],
+                'yhat_upper': [float(last_hist_price)],
+                'yhat_lower': [float(last_hist_price)]
             })
-            future_df = pd.concat([connect_row, future_df]).sort_values("ds")
+
+            future_df = pd.concat([connect_row, future_df]).sort_values("ds").reset_index(drop=True)
+            future_df["ds"] = pd.to_datetime(future_df["ds"])
 
             is_bullish_line = future_df["yhat"].iloc[-1] > last_hist_price
 
             if "OUTPERFORM" in model_badge:
                 badge_color = "#2E8B57"
+                line_color = "#2E8B57"
+                fill_color = "rgba(46,139,87,0.25)"
                 if not is_bullish_line:
-                    line_color, fill_color = "#2E8B57", "rgba(46,139,87,0.12)"
                     insight_text = f"🟢 <b>Model Value Alert:</b> Even though the short-term chart line points slightly downward, the model has flagged this stock as a <b>BUY</b>. This means the stock has dropped recently, making it look discounted. Because its underlying sector fundamentals are rock solid, the framework considers this a great long-term bargain entry point."
                 else:
-                    line_color, fill_color = "#2E8B57", "rgba(46,139,87,0.12)"
                     insight_text = f"🟢 <b>Model Momentum Alert:</b> All metrics are fully aligned. Both the historical price momentum and the sector's risk data suggest room for growth. The stock is backed by strong market demand and stable trading conditions."
             else:
                 badge_color = "#8B949E"
+                line_color = "#E8A33D"
+                fill_color = "rgba(232,163,61,0.25)"
                 if is_bullish_line:
-                    line_color, fill_color = "#E8A33D", "rgba(232,163,61,0.1)"
-                    insight_text = f"⚠️ <b>Risk Warning:</b> The chart shows a slight upward trend based on past seasonal behavior, but the signal engine still warns you to <b>HOLD</b>. Sharp, sudden jumps in market volatility mean this mini-rally is unpredictable and carries a high risk of reversing."
+                    insight_text = f"⚠️ <b>Risk Warning:</b> The chart shows a slight upward trend based on past seasonal behavior, but the classification model still warns you to <b>HOLD</b>. Sharp, sudden jumps in market volatility mean this mini-rally is unpredictable and carries a high risk of reversing."
                 else:
-                    line_color, fill_color = "#E8A33D", "rgba(232,163,61,0.1)"
                     insight_text = f"🛑 <b>Sideways Trend:</b> Price momentum is slowing down and baseline sector risks are expanding. There is no clear advantage to entering a new position right now; sitting on cash is the safer move."
 
+            company_name = COMPANY_NAMES.get(ticker, ticker)
+
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=hist_df["Date"], y=hist_df["Price"], name="Historical", line=dict(color="#58A6FF", width=2.5)))
-            fig.add_trace(go.Scatter(x=future_df["ds"], y=future_df["yhat"], name="Forecast", line=dict(color=line_color, width=2, dash="dash")))
-            fig.add_trace(go.Scatter(x=future_df["ds"], y=future_df["yhat_upper"], line=dict(color="rgba(0,255,204,0)"), showlegend=False))
-            fig.add_trace(go.Scatter(x=future_df["ds"], y=future_df["yhat_lower"], line=dict(color="rgba(0,255,204,0)"), fill='tonexty', fillcolor=fill_color, name="Uncertainty Bound"))
+
+            fig.add_trace(go.Scatter(
+                x=hist_df["Date"], y=hist_df["Price"],
+                name="Historical", mode="lines", line=dict(color="#58A6FF", width=2.5)
+            ))
+            fig.add_trace(go.Scatter(
+                x=future_df["ds"], y=future_df["yhat"],
+                name="Forecast", mode="lines", line=dict(color=line_color, width=2)
+            ))
+            fig.add_trace(go.Scatter(
+                x=future_df["ds"], y=future_df["yhat_upper"],
+                mode="lines", line=dict(color="rgba(0,0,0,0)"),
+                showlegend=False, hoverinfo="skip"
+            ))
+            fig.add_trace(go.Scatter(
+                x=future_df["ds"], y=future_df["yhat_lower"],
+                mode="lines", line=dict(color="rgba(0,0,0,0)"),
+                fill='tonexty', fillcolor=fill_color,
+                name="Uncertainty Bound", hoverinfo="skip"
+            ))
 
             fig.update_layout(
+                template="plotly_dark",
                 title={
-                    'text': f"<b>{ticker}</b> — {last_hist_price:.2f} USD <span style='color:{badge_color}; font-size:12px; margin-left:10px;'>● {model_badge}</span>",
-                    'y': 0.9, 'x': 0.05, 'xanchor': 'left', 'yanchor': 'top', 'font': dict(size=14, color="#E6EDF2")
+                    'text': f"<b>{company_name} ({ticker})</b> — {last_hist_price:.2f} USD <span style='color:{badge_color}; font-size:12px; margin-left:10px;'>● {model_badge}</span>",
+                    'y': 0.9, 'x': 0.05, 'xanchor': 'left', 'yanchor': 'top',
+                    'font': dict(size=14, color="#E6EDF2")
                 },
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                height=260, margin=dict(l=10, r=10, t=60, b=10), hovermode="x unified", showlegend=False,
+                height=260, margin=dict(l=10, r=10, t=60, b=10),
+                hovermode="x unified", showlegend=False,
                 xaxis=dict(showgrid=True, gridcolor="#21262D", linecolor="#30363D"),
                 yaxis=dict(showgrid=True, gridcolor="#21262D", position=1, side="right")
             )
