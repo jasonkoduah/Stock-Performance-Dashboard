@@ -9,6 +9,82 @@ from prophet import Prophet
 st.set_page_config(page_title="Sector Performance Dashboard", layout="wide")
 
 # ==========================================
+# GLOBAL TAB + UI STYLES
+# ==========================================
+st.markdown("""
+<style>
+/* ── Tab bar: make tabs look like real tabs ── */
+div[data-testid="stTabs"] button[role="tab"] {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 24px;
+    border-radius: 6px 6px 0 0;
+    border: 1px solid transparent;
+    color: #8B949E;
+    background: transparent;
+    transition: all 0.15s ease;
+}
+div[data-testid="stTabs"] button[role="tab"]:hover {
+    color: #E6EDF2;
+    background: #161B22;
+    border-color: #30363D;
+}
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    color: #58A6FF !important;
+    background: #161B22 !important;
+    border: 1px solid #30363D !important;
+    border-bottom: 2px solid #58A6FF !important;
+}
+
+/* ── Inline sector selector banner (Stock Performance tab) ── */
+.sector-banner {
+    background: #161B22;
+    border: 1px solid #30363D;
+    border-radius: 8px;
+    padding: 14px 20px;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: #8B949E;
+}
+
+/* ── Stock card insight box ── */
+span[data-baseweb="tag"] {
+    background-color: #21262D !important;
+    color: #E6EDF2 !important;
+    border: 1px solid #30363D !important;
+    border-radius: 4px !important;
+}
+.skeleton-card {
+    background: linear-gradient(90deg, #161b22 25%, #21262d 50%, #161b22 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: 8px;
+    height: 280px;
+    margin-bottom: 1rem;
+    border: 1px solid #30363D;
+}
+@keyframes loading {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+.insight-box {
+    background-color: #161B22;
+    padding: 14px;
+    border-radius: 6px;
+    border: 1px solid #30363D;
+    font-size: 13px;
+    color: #C9D1D9;
+    margin-top: -5px;
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
 # TITLE & DESCRIPTION
 # ==========================================
 st.title("Stock Sector Performance Dashboard")
@@ -55,13 +131,14 @@ SIGNAL_COLORS = {"Strong": "#2E8B57", "Neutral": "#E8A33D", "Weak": "#D9534F"}
 SIGNAL_ORDER = ["Strong", "Neutral", "Weak"]
 PLOTLY_TEMPLATE = "plotly_white"
 
-# --- Sidebar Layout Setup ---
+# ==========================================
+# SIDEBAR — Filters only
+# ==========================================
 st.sidebar.header("Filters")
 selected_period = st.sidebar.selectbox("Select Time Period", options=["1mo", "3mo", "6mo", "1y", "2y"], index=2)
 selected_sectors = st.sidebar.multiselect("Select Sectors", options=list(sectors.keys()), default=list(sectors.keys()))
 
-st.sidebar.header("Stock Performance")
-drilldown_sector = st.sidebar.selectbox("Select a sector to view individual stocks", options=["None"] + selected_sectors)
+# NOTE: drilldown_sector moved INLINE to the Stock Performance tab below
 
 
 @st.cache_data
@@ -73,10 +150,9 @@ def fetch_sector_data(sectors, period):
     return data
 
 
-# Startup Data Load Environment
 with st.status("Initializing System: Downloading global market layers...", expanded=False) as startup_status:
     sector_data = fetch_sector_data(sectors, selected_period)
-    startup_status.update(label="System Ready. Generating performance matrices...", state="complete")
+    startup_status.update(label="System Ready. Generating performance analyses...", state="complete")
 
 st.write("")
 
@@ -151,7 +227,7 @@ def calculate_hybrid_forecast(df_stock, sector_features, horizon=14):
     return forecast, model_signal
 
 
-# Process score arrays
+# Process scores
 scores_df_all = calculate_scores(sector_data)
 scores_df = scores_df_all[scores_df_all["Sector"].isin(selected_sectors)]
 
@@ -165,8 +241,10 @@ sector_order = scores_df["Sector"].tolist()
 last_date = sector_data[list(sector_data.keys())[0]].index[-1].strftime("%B %d, %Y")
 st.caption(f"Data as of {last_date}")
 
-# Setup Tabs
-tab_overview, tab_drilldown = st.tabs(["Sector Overview", "Stock Performance"])
+# ==========================================
+# TABS
+# ==========================================
+tab_overview, tab_drilldown = st.tabs([" Sector Overview", " Stock Performance"])
 
 with tab_overview:
     top = scores_df.iloc[0]
@@ -205,20 +283,22 @@ with tab_overview:
 
 
 # ==========================================
-# DRILLDOWN CONTENT LAYERS
+# STOCK PERFORMANCE TAB
 # ==========================================
 with tab_drilldown:
-    st.markdown("""
-        <style>
-        span[data-baseweb="tag"] { background-color: #21262D !important; color: #E6EDF2 !important; border: 1px solid #30363D !important; border-radius: 4px !important; }
-        .skeleton-card { background: linear-gradient(90deg, #161b22 25%, #21262d 50%, #161b22 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 8px; height: 280px; margin-bottom: 1rem; border: 1px solid #30363D; }
-        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        .insight-box { background-color: #161B22; padding: 14px; border-radius: 6px; border: 1px solid #30363D; font-size: 13px; color: #C9D1D9; margin-top: -5px; margin-bottom: 15px; line-height: 1.5; }
-        </style>
-    """, unsafe_allow_html=True)
+    # ── Inline sector selector (replaces sidebar control) ──
+    st.markdown("**Select a sector to analyze individual stocks:**")
+    drilldown_sector = st.selectbox(
+        "Sector",
+        options=["— choose a sector —"] + sector_order,
+        label_visibility="collapsed",
+        key="inline_sector_selector"
+    )
 
-    if drilldown_sector != "None":
-        st.subheader(f"{drilldown_sector}: Top Stocks Predictive Matrix")
+    st.markdown("---")
+
+    if drilldown_sector != "— choose a sector —":
+        st.subheader(f"{drilldown_sector}: Top Stocks Predictive Analysis")
         sector_meta = scores_df[scores_df["Sector"] == drilldown_sector].iloc[0]
         tickers_to_load = sector_stocks[drilldown_sector]
 
@@ -299,7 +379,6 @@ with tab_drilldown:
             company_name = COMPANY_NAMES.get(ticker, ticker)
 
             fig = go.Figure()
-
             fig.add_trace(go.Scatter(
                 x=hist_df["Date"], y=hist_df["Price"],
                 name="Historical", mode="lines", line=dict(color="#58A6FF", width=2.5)
@@ -339,10 +418,10 @@ with tab_drilldown:
                 st.plotly_chart(fig, use_container_width=True, key=f"ml_chart_{ticker}")
                 st.markdown(f'<div class="insight-box">{insight_text}</div>', unsafe_allow_html=True)
     else:
-        st.info("Select an active sector from the sidebar under Stock Performance to initialize individual asset streams.")
+        st.info("Choose a sector above to load the individual stock predictive matrix.")
 
 # ==========================================
-#  METHODOLOGY CONTAINER
+# METHODOLOGY CONTAINER
 # ==========================================
 st.markdown("---")
 with st.expander("Methodology and System Limitations"):
