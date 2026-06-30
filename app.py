@@ -259,8 +259,14 @@ if scores_df.empty:
 scores_df = scores_df.sort_values("Composite Score", ascending=False).reset_index(drop=True)
 sector_order = scores_df["Sector"].tolist()
 
-last_date = sector_data[list(sector_data.keys())[0]].index[-1].strftime("%B %d, %Y")
-st.caption(f"Data as of {last_date}")
+# Pull the "as of" date from whichever sectors actually had valid data —
+# never assume the first key in the original dict is one of the survivors.
+valid_sectors = [s for s in sector_data if s in scores_df_all["Sector"].values]
+if valid_sectors:
+    last_date = sector_data[valid_sectors[0]].index[-1].strftime("%B %d, %Y")
+    st.caption(f"Data as of {last_date}")
+else:
+    st.caption("Data as of: unavailable")
 
 # ==========================================
 # TABS
