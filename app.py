@@ -159,8 +159,20 @@ st.write("")
 
 def calculate_scores(sector_data):
     scores = []
+    skipped = []
+    MIN_ROWS_REQUIRED = 40  # need ~39+ rows for the 20d-momentum lookback (sma_20.iloc[-20]) to be safe
+
     for sector, df in sector_data.items():
+        if df is None or df.empty or "Close" not in df:
+            skipped.append((sector, "no data returned"))
+            continue
+
         close = df["Close"].squeeze().dropna()
+
+        if len(close) < MIN_ROWS_REQUIRED:
+            skipped.append((sector, f"only {len(close)} rows (need {MIN_ROWS_REQUIRED}+)"))
+            continue
+
         sma_span = min(200, len(close))
         sma_200 = close.rolling(window=sma_span).mean().iloc[-1]
         trend_strength = float(((close.iloc[-1] - sma_200) / sma_200) * 100)
@@ -175,6 +187,15 @@ def calculate_scores(sector_data):
             "Sector": sector, "Trend Strength (%)": round(trend_strength, 2),
             "Volatility (%)": round(volatility, 2), "Vol-Adjusted Return": round(vol_adjusted_return, 2)
         })
+
+    if skipped:
+        msg = "; ".join(f"{s} ({reason})" for s, reason in skipped)
+        st.warning(f"Skipped {len(skipped)} sector(s) due to insufficient data: {msg}")
+
+    if not scores:
+        st.error("No sectors had sufficient data to score. Try a longer time period (e.g. 6mo or 1y) or try again later — this is usually a temporary data-provider issue.")
+        st.stop()
+
     df_scores = pd.DataFrame(scores)
 
     df_scores["Trend Score"] = (df_scores["Trend Strength (%)"] - df_scores["Trend Strength (%)"].min()) / (df_scores["Trend Strength (%)"].max() - df_scores["Trend Strength (%)"].min()) * 100
@@ -325,6 +346,10 @@ with tab_drilldown:
 
         cols = st.columns(2)
         for idx, (ticker, df) in enumerate(stock_data.items()):
+            if df is None or df.empty or len(df) < 30:
+                cols[idx % 2].warning(f"Skipping {ticker}: insufficient price history returned for this period.")
+                continue
+
             forecast, model_badge = calculate_hybrid_forecast(df, sector_meta, horizon=14)
 
             hist_df = df["Close"].reset_index()
